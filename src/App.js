@@ -1,14 +1,25 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { supabase } from "./supabaseClient";
 import "./App.css";
 
-/* ================= BASE64 HELPER ================= */
-const fileToBase64 = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+/* ================= STORAGE HELPER ================= */
+const uploadImageToStorage = async (file) => {
+  const ext = file.name.split(".").pop();
+  const fileName = `${Date.now()}.${ext}`;
+  const filePath = `articles/${fileName}`;
+
+  const { error } = await supabase.storage
+    .from("epaper-images")
+    .upload(filePath, file);
+
+  if (error) throw error;
+
+  const { data } = supabase.storage
+    .from("epaper-images")
+    .getPublicUrl(filePath);
+
+  return data.publicUrl;
+};
 
 /* ================= ADMIN LOGIN ================= */
 function AdminLogin({ onLogin }) {
@@ -27,8 +38,8 @@ function AdminLogin({ onLogin }) {
   return (
     <div className="admin login">
       <h2>Admin Login</h2>
-      <input value={id} placeholder="Admin ID" onChange={e => setId(e.target.value)} />
-      <input type="password" value={pwd} placeholder="Password" onChange={e => setPwd(e.target.value)} />
+      <input value={id} onChange={e => setId(e.target.value)} placeholder="Admin ID" />
+      <input type="password" value={pwd} onChange={e => setPwd(e.target.value)} placeholder="Password" />
       <button onClick={handleLogin}>Login</button>
       {error && <p className="error">{error}</p>}
     </div>
@@ -36,39 +47,43 @@ function AdminLogin({ onLogin }) {
 }
 
 /* ================= ADMIN PANEL ================= */
-function AdminPanel({ pages, setPages, onClose }) {
+function AdminPanel({ pages, reloadPages, onClose }) {
   const [newTitle, setNewTitle] = useState("");
   const [selectedPage, setSelectedPage] = useState(0);
   const [article, setArticle] = useState({ img: "", title: "", text: "" });
 
-  const addLayout = () => {
+  const addLayout = async () => {
     if (!newTitle) return;
-    setPages([...pages, { title: newTitle, articles: [] }]);
+    await supabase.from("layouts").insert([{ title: newTitle }]);
     setNewTitle("");
+    reloadPages();
   };
 
-  const deleteLayout = (i) => {
+  const deleteLayout = async (id) => {
     if (!window.confirm("Delete this layout?")) return;
-    setPages(pages.filter((_, index) => index !== i));
+    await supabase.from("layouts").delete().eq("id", id);
+    reloadPages();
   };
 
-   /* ✅ ADD ARTICLE (LATEST FIRST + DATE) */
-  const addArticle = () => {
+  const addArticle = async () => {
     if (!article.title || !article.text || !article.img) return;
-    const updated = [...pages];
-     updated[selectedPage].articles.unshift({
-      ...article,
-      createdAt: Date.now()
-    });
 
-    setPages(updated);
+    await supabase.from("articles").insert([
+      {
+        layout_id: pages[selectedPage].id,
+        title: article.title,
+        text: article.text,
+        img: article.img,
+      },
+    ]);
+
     setArticle({ img: "", title: "", text: "" });
+    reloadPages();
   };
 
-  const deleteArticle = (i) => {
-    const updated = [...pages];
-    updated[selectedPage].articles.splice(i, 1);
-    setPages(updated);
+  const deleteArticle = async (id) => {
+    await supabase.from("articles").delete().eq("id", id);
+    reloadPages();
   };
 
   return (
@@ -87,10 +102,10 @@ function AdminPanel({ pages, setPages, onClose }) {
 
       <hr />
 
-      {pages.map((p, i) => (
-        <div key={i} className="delete-row">
+      {pages.map(p => (
+        <div key={p.id} className="delete-row">
           <b>{p.title}</b>
-          <button onClick={() => deleteLayout(i)}>🗑</button>
+          <button onClick={() => deleteLayout(p.id)}>🗑</button>
         </div>
       ))}
 
@@ -98,7 +113,7 @@ function AdminPanel({ pages, setPages, onClose }) {
 
       <select onChange={e => setSelectedPage(Number(e.target.value))}>
         {pages.map((p, i) => (
-          <option key={i} value={i}>{p.title}</option>
+          <option key={p.id} value={i}>{p.title}</option>
         ))}
       </select>
 
@@ -108,12 +123,12 @@ function AdminPanel({ pages, setPages, onClose }) {
         onChange={async e => {
           const file = e.target.files[0];
           if (!file) return;
-          const base64 = await fileToBase64(file);
-          setArticle({ ...article, img: base64 });
+          const url = await uploadImageToStorage(file);
+          setArticle({ ...article, img: url });
         }}
       />
 
-      {article.img && <img src={article.img} alt="" style={{ width: 120 }} />}
+      {article.img && <img src={article.img} alt="" width={120} />}
 
       <input
         placeholder="Article Title"
@@ -129,10 +144,10 @@ function AdminPanel({ pages, setPages, onClose }) {
 
       <button onClick={addArticle}>➕ Add Article</button>
 
-      {pages[selectedPage]?.articles.map((a, i) => (
-        <div key={i} className="delete-row">
+      {pages[selectedPage]?.articles?.map(a => (
+        <div key={a.id} className="delete-row">
           {a.title}
-          <button onClick={() => deleteArticle(i)}>🗑</button>
+          <button onClick={() => deleteArticle(a.id)}>🗑</button>
         </div>
       ))}
     </div>
@@ -141,34 +156,41 @@ function AdminPanel({ pages, setPages, onClose }) {
 
 /* ================= MAIN APP ================= */
 export default function App() {
+  const [pages, setPages] = useState([]);
   const [current, setCurrent] = useState(0);
   const [showAdmin, setShowAdmin] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  const [pages, setPages] = useState(() => {
-    const saved = localStorage.getItem("anews-pages");
-    return saved ? JSON.parse(saved) : [{ title: "Top Headlines", articles: [] }];
-  });
+  const loadPages = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("layouts")
+      .select(`
+        id,
+        title,
+        articles (
+          id,
+          title,
+          text,
+          img,
+          created_at
+        )
+      `)
+      .order("id", { ascending: true });
 
-  /* 🔐 SECRET ADMIN URL CHECK */
+    if (!error) setPages(data || []);
+  }, []);
+
+  useEffect(() => {
+    loadPages();
+  }, [loadPages]);
+
   useEffect(() => {
     if (window.location.hash === "#/ANEWS-x9Qm25-SEC-admin") {
       setShowAdmin(true);
     }
   }, []);
 
-  /* 💾 AUTO SAVE */
-  useEffect(() => {
-    localStorage.setItem("anews-pages", JSON.stringify(pages));
-  }, [pages]);
-
-  const nextPage = useCallback(
-    () => setCurrent(p => (p + 1) % pages.length),
-    [pages.length]
-  );
-
-  const prevPage = () =>
-    setCurrent(p => (p - 1 + pages.length) % pages.length);
+  const currentPage = pages[current];
 
   return (
     <div className="app">
@@ -177,16 +199,13 @@ export default function App() {
         <h1 className="title">ANEWS E-PAPER</h1>
       </header>
 
-      <nav className="navbar">
+    <nav className="navbar">
         <button className="nav-link active">Home</button>
-
-        {/* ❌ ADMIN BUTTON REMOVED */}
-
         <div className="nav-date">
           {new Date().toLocaleDateString("en-IN", {
             day: "2-digit",
             month: "short",
-            year: "numeric"
+            year: "numeric",
           })}
         </div>
       </nav>
@@ -194,33 +213,49 @@ export default function App() {
       <main className="viewer-area">
         {showAdmin ? (
           isLoggedIn ? (
-            <AdminPanel pages={pages} setPages={setPages} onClose={() => setShowAdmin(false)} />
+            
+            <AdminPanel
+              pages={pages}
+              reloadPages={loadPages}  
+              onClose={() => {
+                setShowAdmin(false);
+                setIsLoggedIn(false);
+                window.location.hash = "";
+              }}
+            />
           ) : (
             <AdminLogin onLogin={() => setIsLoggedIn(true)} />
           )
         ) : (
-          <section className="viewer">
-            <div className="page-bar">
-              <button onClick={prevPage}>◀ Prev</button>
-              <p>Page {current + 1} / {pages.length}</p>
-              <button onClick={nextPage}>Next ▶</button>
-            </div>
+          currentPage && (             /* ✅ FIX 2 */
+            <section className="viewer">
+              <div className="page-bar">
+                <button onClick={() => setCurrent(c => (c - 1 + pages.length) % pages.length)}>
+                  ◀ Prev
+                </button>
 
-            <h2>{pages[current].title}</h2>
+                <p>Page {current + 1} / {pages.length}</p>
 
-            <div className="page-grid">
-              {[...pages[current].articles]
-                 .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-                   .map((a, i) => (
+                <button onClick={() => setCurrent(c => (c + 1) % pages.length)}>
+                  Next ▶
+                </button>
+              </div>
 
-                <div key={i} className="article-box">
-                  <img src={a.img} alt={a.title} />
-                  <h3>{a.title}</h3>
-                  <p>{a.text}</p>
-                </div>
-              ))}
-            </div>
-          </section>
+              <h2>{currentPage.title}</h2>
+
+              <div className="page-grid">
+                {[...(currentPage.articles || [])]
+                  .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) 
+                  .map(a => (
+                    <div key={a.id} className="article-box">
+                      <img src={a.img} alt={a.title} />
+                      <h3>{a.title}</h3>
+                      <p>{a.text}</p>
+                    </div>
+                  ))}
+              </div>
+            </section>
+          )
         )}
       </main>
 
