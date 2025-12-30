@@ -175,10 +175,10 @@ function AdminPanel({ pages, reloadPages, onClose }) {
       <hr />
 
       <select
-  value={selectedPage}
+   value={selectedPage ?? ""}
   onChange={(e) => setSelectedPage(Number(e.target.value))}
 >
-  <option value="" disabled>
+  <option value="" >
     Select layout
   </option>
 
