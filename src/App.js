@@ -21,26 +21,44 @@ const uploadImageToStorage = async (file) => {
   return data.publicUrl;
 };
 
-/* ================= ADMIN LOGIN ================= */
+/* ================= ADMIN LOGIN (SUPABASE AUTH) ================= */
 function AdminLogin({ onLogin }) {
-  const [id, setId] = useState("");
+  const [email, setEmail] = useState("");
   const [pwd, setPwd] = useState("");
   const [error, setError] = useState("");
 
-  const handleLogin = () => {
-    if (id === "anews@25" && pwd === "ANEWS@1225") {
-      onLogin();
+  const handleLogin = async () => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password: pwd,
+    });
+
+    if (error) {
+      setError(error.message);
     } else {
-      setError("Invalid Admin ID or Password");
+      onLogin();
     }
   };
 
   return (
     <div className="admin login">
       <h2>Admin Login</h2>
-      <input value={id} onChange={e => setId(e.target.value)} placeholder="Admin ID" />
-      <input type="password" value={pwd} onChange={e => setPwd(e.target.value)} placeholder="Password" />
+
+      <input
+        value={email}
+        onChange={e => setEmail(e.target.value)}
+        placeholder="Admin Email"
+      />
+
+      <input
+        type="password"
+        value={pwd}
+        onChange={e => setPwd(e.target.value)}
+        placeholder="Password"
+      />
+
       <button onClick={handleLogin}>Login</button>
+
       {error && <p className="error">{error}</p>}
     </div>
   );
@@ -89,7 +107,16 @@ function AdminPanel({ pages, reloadPages, onClose }) {
   return (
     <div className="admin">
       <h2>Admin Panel</h2>
-      <button onClick={onClose}>Logout</button>
+
+      {/* STEP 3: Proper Supabase logout */}
+      <button
+        onClick={async () => {
+          await supabase.auth.signOut();
+          onClose();
+        }}
+      >
+        Logout
+      </button>
 
       <hr />
 
@@ -184,6 +211,29 @@ export default function App() {
     loadPages();
   }, [loadPages]);
 
+  /* ================= STEP 3: SESSION PERSISTENCE ================= */
+  useEffect(() => {
+    // 1️⃣ Check existing session on refresh
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setIsLoggedIn(true);
+        setShowAdmin(true);
+      }
+    });
+
+    // 2️⃣ Listen to auth changes
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setIsLoggedIn(!!session);
+      }
+    );
+
+    return () => {
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+  /* =============================================================== */
+
   useEffect(() => {
     if (window.location.hash === "#/ANEWS-x9Qm25-SEC-admin") {
       setShowAdmin(true);
@@ -199,7 +249,7 @@ export default function App() {
         <h1 className="title">ANEWS E-PAPER</h1>
       </header>
 
-    <nav className="navbar">
+      <nav className="navbar">
         <button className="nav-link active">Home</button>
         <div className="nav-date">
           {new Date().toLocaleDateString("en-IN", {
@@ -213,10 +263,9 @@ export default function App() {
       <main className="viewer-area">
         {showAdmin ? (
           isLoggedIn ? (
-            
             <AdminPanel
               pages={pages}
-              reloadPages={loadPages}  
+              reloadPages={loadPages}
               onClose={() => {
                 setShowAdmin(false);
                 setIsLoggedIn(false);
@@ -227,7 +276,7 @@ export default function App() {
             <AdminLogin onLogin={() => setIsLoggedIn(true)} />
           )
         ) : (
-          currentPage && (             /* ✅ FIX 2 */
+          currentPage && (
             <section className="viewer">
               <div className="page-bar">
                 <button onClick={() => setCurrent(c => (c - 1 + pages.length) % pages.length)}>
@@ -245,7 +294,7 @@ export default function App() {
 
               <div className="page-grid">
                 {[...(currentPage.articles || [])]
-                  .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) 
+                  .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
                   .map(a => (
                     <div key={a.id} className="article-box">
                       <img src={a.img} alt={a.title} />
