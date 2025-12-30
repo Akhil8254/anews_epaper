@@ -66,25 +66,26 @@ function AdminLogin() {
 /* ================= ADMIN PANEL ================= */
 function AdminPanel({ pages, reloadPages, onClose }) {
   const [newTitle, setNewTitle] = useState("");
-  const [selectedPage, setSelectedPage] = useState(0);
+ const [selectedPage, setSelectedPage] = useState(null);
+
   const [article, setArticle] = useState({ img: "", title: "", text: "" });
 
   const addLayout = async () => {
-    if (!newTitle) return;
+  if (!newTitle) return;
 
-    const { error } = await supabase
-      .from("layouts")
-      .insert([{ title: newTitle }]);
+  const { error } = await supabase
+    .from("layouts")
+    .insert([{ title: newTitle }]);
 
-    if (error) {
-      alert("Add layout failed: " + error.message);
-      console.error(error);
-      return;
-    }
+  if (error) {
+    alert("Add layout failed: " + error.message);
+    return;
+  }
 
-    setNewTitle("");
-    reloadPages();
-  };
+  setNewTitle("");
+  await reloadPages();
+};
+
 
   const deleteLayout = async (id) => {
     if (!window.confirm("Delete this layout?")) return;
@@ -165,13 +166,21 @@ function AdminPanel({ pages, reloadPages, onClose }) {
 
       <hr />
 
-      <select onChange={(e) => setSelectedPage(Number(e.target.value))}>
-        {pages.map((p, i) => (
-          <option key={p.id} value={i}>
-            {p.title}
-          </option>
-        ))}
-      </select>
+      <select
+  value={selectedPage ?? ""}
+  onChange={(e) => setSelectedPage(Number(e.target.value))}
+>
+  <option value="" disabled>
+    Select layout
+  </option>
+
+  {pages.map((p, i) => (
+    <option key={p.id} value={i}>
+      {p.title}
+    </option>
+  ))}
+</select>
+
 
       <input
         type="file"
@@ -278,16 +287,18 @@ export default function App() {
       </nav>
 
       <main className="viewer-area">
-        {showAdmin && isLoggedIn ? (
-          <AdminPanel
-            pages={pages}
-            reloadPages={loadPages}
-            onClose={() => {
-              setShowAdmin(false);
-              setIsLoggedIn(false);
-              window.location.hash = "";
-            }}
-          />
+       {showAdmin && isLoggedIn ? (
+  <AdminPanel
+    key={pages.length}
+    pages={pages}
+    reloadPages={loadPages}
+    onClose={() => {
+      setShowAdmin(false);
+      setIsLoggedIn(false);
+      window.location.hash = "";
+    }}
+  />
+
         ) : showAdmin ? (
           <AdminLogin />
         ) : (
