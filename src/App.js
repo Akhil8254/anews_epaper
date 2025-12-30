@@ -66,7 +66,7 @@ function AdminLogin() {
 /* ================= ADMIN PANEL ================= */
 function AdminPanel({ pages, reloadPages, onClose }) {
   const [newTitle, setNewTitle] = useState("");
- const [selectedPage, setSelectedPage] = useState("");
+ const [selectedPage, setSelectedPage] = useState(null);
 
   const [article, setArticle] = useState({ img: "", title: "", text: "" });
 
@@ -176,7 +176,7 @@ function AdminPanel({ pages, reloadPages, onClose }) {
 
       <select
   value={selectedPage}
-  onChange={(e) => setSelectedPage(e.target.value)}
+  onChange={(e) => setSelectedPage(Number(e.target.value))}
 >
   <option value="" disabled>
     Select layout
