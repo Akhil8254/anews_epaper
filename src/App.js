@@ -176,14 +176,14 @@ function AdminPanel({ pages, reloadPages, onClose }) {
 
       <select
    value={selectedPage}
-  onChange={(e) => setSelectedPage(Number(e.target.value))}
+  onChange={(e) => setSelectedPage(e.target.value)}
 >
   <option value="" >
     Select layout
   </option>
 
   {pages.map((p) => (
-    <option key={p.id} value={p.id}>
+    <option key={p.id} value={p.id.toString()}>
       {p.title}
     </option>
   ))}
@@ -218,7 +218,7 @@ function AdminPanel({ pages, reloadPages, onClose }) {
       <button onClick={addArticle}>➕ Add Article</button>
 
       {pages
-  .find((p) => p.id === selectedPage)
+  .find((p) => p.id === Number(selectedPage))
   ?.articles?.map((a) => (
     <div key={a.id} className="delete-row">
       {a.title}
@@ -238,15 +238,24 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   const loadPages = useCallback(async () => {
-    const { data } = await supabase
-      .from("layouts")
-      .select(
-        `id, title, articles (id, title, text, img, created_at)`
-      )
-      .order("id", { ascending: true });
+  const { data, error } = await supabase
+    .from("layouts")
+    .select(`id, title, articles (id, title, text, img, created_at)`)
+    .order("id", { ascending: true });
 
-    setPages(data || []);
-  }, []);
+  if (error) {
+    console.error(error);
+    return;
+  }
+
+  const normalized = (data || []).map((p) => ({
+    ...p,
+    articles: p.articles || [], // ✅ IMPORTANT
+  }));
+
+  setPages(normalized);
+}, []);
+
 
   useEffect(() => {
     loadPages();
