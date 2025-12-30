@@ -66,7 +66,7 @@ function AdminLogin() {
 /* ================= ADMIN PANEL ================= */
 function AdminPanel({ pages, reloadPages, onClose }) {
   const [newTitle, setNewTitle] = useState("");
- const [selectedPage, setSelectedPage] = useState(null);
+ const [selectedPage, setSelectedPage] = useState("");
 
   const [article, setArticle] = useState({ img: "", title: "", text: "" });
 
@@ -103,33 +103,32 @@ function AdminPanel({ pages, reloadPages, onClose }) {
     reloadPages();
   };
 
-  const addArticle = async () => {
-
-      if (selectedPage === null) {
+ const addArticle = async () => {
+  if (!selectedPage) {
     alert("Please select a layout first");
     return;
   }
 
-    if (!article.title || !article.text || !article.img) return;
+  if (!article.title || !article.text || !article.img) return;
 
-    const { error } = await supabase.from("articles").insert([
-      {
-        layout_id: pages[selectedPage].id,
-        title: article.title,
-        text: article.text,
-        img: article.img,
-      },
-    ]);
+  const { error } = await supabase.from("articles").insert([
+    {
+      layout_id: selectedPage, // ✅ DIRECT ID
+      title: article.title,
+      text: article.text,
+      img: article.img,
+    },
+  ]);
 
-    if (error) {
-      alert("Add article failed: " + error.message);
-      console.error(error);
-      return;
-    }
+  if (error) {
+    alert(error.message);
+    return;
+  }
 
-    setArticle({ img: "", title: "", text: "" });
-    reloadPages();
-  };
+  setArticle({ img: "", title: "", text: "" });
+  reloadPages();
+};
+
 
   const deleteArticle = async (id) => {
     const { error } = await supabase.from("articles").delete().eq("id", id);
@@ -176,15 +175,15 @@ function AdminPanel({ pages, reloadPages, onClose }) {
       <hr />
 
       <select
-  value={selectedPage ?? ""}
-  onChange={(e) => setSelectedPage(Number(e.target.value))}
+  value={selectedPage}
+  onChange={(e) => setSelectedPage(e.target.value)}
 >
   <option value="" disabled>
     Select layout
   </option>
 
-  {pages.map((p, i) => (
-    <option key={p.id} value={i}>
+  {pages.map((p) => (
+    <option key={p.id} value={p.id}>
       {p.title}
     </option>
   ))}
@@ -218,12 +217,15 @@ function AdminPanel({ pages, reloadPages, onClose }) {
 
       <button onClick={addArticle}>➕ Add Article</button>
 
-      {pages[selectedPage]?.articles?.map((a) => (
-        <div key={a.id} className="delete-row">
-          {a.title}
-          <button onClick={() => deleteArticle(a.id)}>🗑</button>
-        </div>
-      ))}
+      {pages
+  .find((p) => p.id === selectedPage)
+  ?.articles?.map((a) => (
+    <div key={a.id} className="delete-row">
+      {a.title}
+      <button onClick={() => deleteArticle(a.id)}>🗑</button>
+    </div>
+))}
+
     </div>
   );
 }
