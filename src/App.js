@@ -66,7 +66,7 @@ function AdminLogin() {
 /* ================= ADMIN PANEL ================= */
 function AdminPanel({ pages, reloadPages, onClose }) {
   const [newTitle, setNewTitle] = useState("");
- const [selectedPage, setSelectedPage] = useState(null);
+ const [selectedPage, setSelectedPage] = useState("");
 
   const [article, setArticle] = useState({ img: "", title: "", text: "" });
 
@@ -113,7 +113,7 @@ function AdminPanel({ pages, reloadPages, onClose }) {
 
   const { error } = await supabase.from("articles").insert([
     {
-      layout_id: selectedPage, // ✅ DIRECT ID
+      layout_id: Number(selectedPage), // ✅ FORCE NUMBER
       title: article.title,
       text: article.text,
       img: article.img,
@@ -126,7 +126,7 @@ function AdminPanel({ pages, reloadPages, onClose }) {
   }
 
   setArticle({ img: "", title: "", text: "" });
-  reloadPages();
+  await reloadPages();
 };
 
 
@@ -175,7 +175,7 @@ function AdminPanel({ pages, reloadPages, onClose }) {
       <hr />
 
       <select
-   value={selectedPage ?? ""}
+   value={selectedPage}
   onChange={(e) => setSelectedPage(Number(e.target.value))}
 >
   <option value="" >
