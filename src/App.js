@@ -70,6 +70,13 @@ function AdminPanel({ pages, reloadPages, onClose }) {
 
   const [article, setArticle] = useState({ img: "", title: "", text: "" });
 
+useEffect(() => {
+  if (pages.length > 0 && selectedPage === null) {
+    setSelectedPage(0);
+  }
+}, [pages, selectedPage]);
+
+
   const addLayout = async () => {
   if (!newTitle) return;
 
@@ -84,6 +91,10 @@ function AdminPanel({ pages, reloadPages, onClose }) {
 
   setNewTitle("");
   await reloadPages();
+
+ // ✅ auto-select newly added layout
+  setSelectedPage(pages.length);
+
 };
 
 
