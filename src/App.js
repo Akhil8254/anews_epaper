@@ -297,16 +297,16 @@ export default function App() {
 
       <main className="viewer-area">
        {showAdmin && isLoggedIn ? (
-  <AdminPanel
-    key={pages.length}
-    pages={pages}
-    reloadPages={loadPages}
-    onClose={() => {
-      setShowAdmin(false);
-      setIsLoggedIn(false);
-      window.location.hash = "";
-    }}
-  />
+ <AdminPanel
+  pages={pages}
+  reloadPages={loadPages}
+  onClose={() => {
+    setShowAdmin(false);
+    setIsLoggedIn(false);
+    window.location.hash = "";
+  }}
+/>
+
 
         ) : showAdmin ? (
           <AdminLogin />
